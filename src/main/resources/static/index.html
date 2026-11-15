@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinTech Settlement & Reconciliation Engine</title>
+  <style>
+    :root {
+      --bg-obsidian: #070b14;
+      --bg-panel: rgba(15, 23, 42, 0.78);
+      --bg-input: #0b1222;
+      --border-glass: rgba(59, 130, 246, 0.24);
+      --cobalt: #3b82f6;
+      --cobalt-bright: #60a5fa;
+      --lime: #a3e635;
+      --lime-dim: rgba(163, 230, 53, 0.14);
+      --danger: #f87171;
+      --danger-dim: rgba(248, 113, 113, 0.14);
+      --warn: #fbbf24;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --font-mono: 'Consolas', 'Courier New', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: radial-gradient(circle at top right, #101e3b 0%, var(--bg-obsidian) 55%);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container { max-width: 1420px; margin: 0 auto; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border-glass);
+      margin-bottom: 24px;
+    }
+
+    .brand h1 {
+      font-size: 1.45rem;
+      letter-spacing: 0.4px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand span.tag {
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      background: rgba(59, 130, 246, 0.18);
+      border: 1px solid var(--cobalt);
+      color: var(--cobalt-bright);
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .brand p { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
+
+    .header-actions { display: flex; align-items: center; gap: 12px; }
+
+    .status-pill {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--lime);
+      background: var(--lime-dim);
+      color: var(--lime);
+    }
+
+    .status-pill.error {
+      border-color: var(--danger);
+      background: var(--danger-dim);
+      color: var(--danger);
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 9px 15px;
+      transition: all 0.15s ease;
+    }
+
+    .btn-primary { background: var(--cobalt); color: #fff; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-lime { background: var(--lime); color: #090d16; }
+    .btn-lime:hover { background: #bef264; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border-glass);
+      color: var(--text-main);
+    }
+    .btn-outline:hover { border-color: var(--cobalt-bright); }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-glass);
+      border-radius: 12px;
+      padding: 18px;
+    }
+
+    .kpi-label {
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    .kpi-value {
+      font-family: var(--font-mono);
+      font-size: 1.55rem;
+      font-weight: 700;
+      margin-top: 8px;
+      color: #fff;
+    }
+
+    .kpi-sub {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--lime);
+      margin-top: 4px;
+    }
+
+    .sim-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      margin-bottom: 14px;
+      color: var(--cobalt-bright);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+
+    label { font-size: 0.76rem; color: var(--text-muted); }
+
+    input, select {
+      background: var(--bg-input);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      color: var(--text-main);
+      padding: 8px 10px;
+      border-radius: 7px;
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--cobalt-bright);
+    }
+
+    .hmac-box {
+      background: #050811;
+      border: 1px dashed rgba(163, 230, 53, 0.35);
+      border-radius: 7px;
+      padding: 8px 10px;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--lime);
+      word-break: break-all;
+      margin-bottom: 12px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      max-width: 440px;
+      background: #0f172a;
+      border: 1px solid var(--lime);
+      color: var(--text-main);
+      padding: 14px 18px;
+      border-radius: 10px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+      display: none;
+      z-index: 999;
+    }
+
+    .tables-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+      gap: 20px;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      font-family: var(--font-mono);
+    }
+
+    th, td {
+      text-align: left;
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      white-space: nowrap;
+    }
+
+    th {
+      color: var(--text-muted);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+    }
+
+    .badge {
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .b-settled { background: var(--lime-dim); color: var(--lime); }
+    .b-debit { background: rgba(59, 130, 246, 0.18); color: var(--cobalt-bright); }
+    .b-refund { background: rgba(251, 191, 36, 0.18); color: var(--warn); }
+    .b-fail { background: var(--danger-dim); color: var(--danger); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="brand">
+      <h1>SETTLEMENT CORE &amp; LEDGER ENGINE <span class="tag">T+0 ACID</span></h1>
+      <p>HMAC-SHA256 Ingestion &bull; PostgreSQL Outbox &bull; Kafka Partitioned Stream &bull; Redis Cache-Aside</p>
+    </div>
+    <div class="header-actions">
+      <div id="reconPill" class="status-pill">CHECKING RECONCILIATION...</div>
+      <button class="btn-outline" onclick="refreshDashboard()">Refresh Now</button>
+    </div>
+  </header>
+
+  <!-- KPI Row -->
+  <section class="kpi-grid">
+    <div class="card">
+      <div class="kpi-label">Total Wallet Liability</div>
+      <div class="kpi-value" id="kpiWallet">₦0.00</div>
+      <div class="kpi-sub" id="kpiWalletKobo">0 kobo</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Net Immutable Ledger</div>
+      <div class="kpi-value" id="kpiLedger">₦0.00</div>
+      <div class="kpi-sub" id="kpiLedgerKobo">0 kobo</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Platform Fee Revenue</div>
+      <div class="kpi-value" id="kpiRevenue">₦0.00</div>
+      <div class="kpi-sub" id="kpiRevenueKobo">0 kobo</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Reconciliation Variance</div>
+      <div class="kpi-value" id="kpiVariance">0 kobo</div>
+      <div class="kpi-sub" id="kpiOutbox">Pending Outbox: 0</div>
+    </div>
+  </section>
+
+  <!-- Interactive Simulators -->
+  <section class="sim-grid">
+    <!-- 1. Inbound Credit Simulator -->
+    <div class="card">
+      <h2>1. Inbound NIBSS Credit <span class="tag">HMAC-SHA256</span></h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Transaction Reference</label>
+          <input id="crRef" type="text" />
+        </div>
+        <div class="form-group">
+          <label>Virtual Account</label>
+          <select id="crVa" onchange="syncMerchantFromVa()">
+            <option value="0123456789" data-mch="MCH-8821">0123456789 (MCH-8821 - 1.5%)</option>
+            <option value="9876543210" data-mch="MCH-9901">9876543210 (MCH-9901 - 0.5% VIP)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Merchant ID</label>
+          <input id="crMch" type="text" value="MCH-8821" />
+        </div>
+        <div class="form-group">
+          <label>Amount (Kobo) [e.g. 5000000 = ₦50k]</label>
+          <input id="crAmt" type="number" value="5000000" oninput="updateHmacPreview()" />
+        </div>
+      </div>
+      <div class="hmac-box" id="hmacPreview">X-Webhook-Signature: computing...</div>
+      <button class="btn-lime" style="width:100%" onclick="sendCreditWebhook()">Sign &amp; Dispatch Settlement Webhook</button>
+    </div>
+
+    <!-- 2. Two-Phase Payout Simulator -->
+    <div class="card">
+      <h2>2. Two-Phase Merchant Payout <span class="tag">TOCTOU GUARD</span></h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Payout Reference</label>
+          <input id="poRef" type="text" />
+        </div>
+        <div class="form-group">
+          <label>Merchant ID</label>
+          <select id="poMch">
+            <option value="MCH-8821">MCH-8821</option>
+            <option value="MCH-9901">MCH-9901</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Destination Bank</label>
+          <select id="poBank">
+            <option value="058">058 - GTBank (Success Path)</option>
+            <option value="999">999 - Switch Timeout (Auto-Refund)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Amount (Kobo)</label>
+          <input id="poAmt" type="number" value="2500000" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Destination NUBAN Account</label>
+        <input id="poAcct" type="text" value="0123456789" />
+      </div>
+      <button class="btn-primary" style="width:100%" onclick="sendPayoutRequest()">Execute Two-Phase Disbursement</button>
+    </div>
+
+    <!-- 3. Virtual Account Provisioner -->
+    <div class="card">
+      <h2>3. Provision Virtual Account <span class="tag">REDIS CACHE-ASIDE</span></h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>New Virtual Account (10-digit)</label>
+          <input id="vaNum" type="text" value="5544332211" />
+        </div>
+        <div class="form-group">
+          <label>Merchant ID</label>
+          <input id="vaMch" type="text" value="MCH-7700" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Merchant Business Name</label>
+        <input id="vaName" type="text" value="Flutterwave Logistics Hub" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Fee Tier (Basis Points, 100 = 1%)</label>
+          <input id="vaBps" type="number" value="100" />
+        </div>
+        <div class="form-group">
+          <label>Fee Cap (Kobo)</label>
+          <input id="vaCap" type="number" value="100000" />
+        </div>
+      </div>
+      <button class="btn-outline" style="width:100%; border-color: var(--cobalt-bright)" onclick="provisionVirtualAccount()">Register &amp; Cache Virtual Account</button>
+    </div>
+  </section>
+
+  <!-- Data Tables -->
+  <section class="tables-grid">
+    <div class="two-col">
+      <div class="card">
+        <h2>Merchant Wallets &amp; Audit Parity</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Merchant ID</th><th>Wallet Balance</th><th>Ledger Net</th><th>Variance</th></tr>
+            </thead>
+            <tbody id="tblMerchants"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Virtual Account Registry &amp; Fee Tiers</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Account</th><th>Merchant</th><th>Tier (bps)</th><th>Cap (Kobo)</th></tr>
+            </thead>
+            <tbody id="tblVa"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Immutable Double-Entry Settlement Ledger (Latest 25)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Reference</th>
+              <th>Merchant</th>
+              <th>Account / Bank</th>
+              <th>Gross (Kobo)</th>
+              <th>Fee (Kobo)</th>
+              <th>Net Payout (Kobo)</th>
+              <th>Entry Type</th>
+            </tr>
+          </thead>
+          <tbody id="tblLedger"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h2>PostgreSQL Outbox Relay Stream</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Aggregate / Key</th><th>Type</th><th>Status</th></tr>
+            </thead>
+            <tbody id="tblOutbox"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Dead-Letter Topic (.DLT) Quarantine</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Key</th><th>Topic</th><th>Failure Reason</th></tr>
+            </thead>
+            <tbody id="tblDlt"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  const SECRET_KEY = 'nibss-super-secret-key-2026';
+
+  function formatNaira(kobo) {
+    const val = (Number(kobo || 0) / 100);
+    return '₦' + val.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function nextRefs() {
+    const suffix = Math.floor(1000 + Math.random() * 9000);
+    document.getElementById('crRef').value = 'TXN-WEB-' + suffix;
+    document.getElementById('poRef').value = 'PAY-WEB-' + suffix;
+    updateHmacPreview();
+  }
+
+  function showToast(msg, isError = false) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.borderColor = isError ? 'var(--danger)' : 'var(--lime)';
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 5500);
+  }
+
+  // Pure JS HMAC-SHA256 fallback so signing works on any host/IP without HTTPS restrictions
+  async function computeHmacHex(keyStr, msgStr) {
+    if (window.crypto && window.crypto.subtle) {
+      const enc = new TextEncoder();
+      const key = await window.crypto.subtle.importKey(
+        'raw', enc.encode(keyStr), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+      );
+      const sig = await window.crypto.subtle.sign('HMAC', key, enc.encode(msgStr));
+      return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    return '';
+  }
+
+  function buildCreditPayload() {
+    return JSON.stringify({
+      transactionReference: document.getElementById('crRef').value.trim(),
+      virtualAccountNumber: document.getElementById('crVa').value.trim(),
+      amountKobo: Number(document.getElementById('crAmt').value),
+      merchantId: document.getElementById('crMch').value.trim()
+    });
+  }
+
+  function syncMerchantFromVa() {
+    const sel = document.getElementById('crVa');
+    const opt = sel.options[sel.selectedIndex];
+    if (opt && opt.dataset.mch) {
+      document.getElementById('crMch').value = opt.dataset.mch;
+    }
+    updateHmacPreview();
+  }
+
+  async function updateHmacPreview() {
+    const body = buildCreditPayload();
+    const hex = await computeHmacHex(SECRET_KEY, body);
+    document.getElementById('hmacPreview').textContent = 'X-Webhook-Signature: ' + hex;
+  }
+
+  async function sendCreditWebhook() {
+    const body = buildCreditPayload();
+    const sig = await computeHmacHex(SECRET_KEY, body);
+    try {
+      const res = await fetch('/api/v1/settlements/webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Webhook-Signature': sig },
+        body
+      });
+      const data = await res.json();
+      showToast(`[${res.status}] ${data.status}: ${data.message}`, !res.ok);
+      nextRefs();
+      setTimeout(refreshDashboard, 1200);
+    } catch (e) {
+      showToast('Webhook failed: ' + e.message, true);
+    }
+  }
+
+  async function sendPayoutRequest() {
+    const body = JSON.stringify({
+      payoutReference: document.getElementById('poRef').value.trim(),
+      merchantId: document.getElementById('poMch').value,
+      destinationBankCode: document.getElementById('poBank').value,
+      destinationAccountNumber: document.getElementById('poAcct').value.trim(),
+      amountKobo: Number(document.getElementById('poAmt').value)
+    });
+    const sig = await computeHmacHex(SECRET_KEY, body);
+    try {
+      const res = await fetch('/api/v1/payouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Webhook-Signature': sig },
+        body
+      });
+      const data = await res.json();
+      showToast(`[${res.status}] ${data.status}: ${data.message}`, !res.ok);
+      nextRefs();
+      refreshDashboard();
+    } catch (e) {
+      showToast('Payout failed: ' + e.message, true);
+    }
+  }
+
+  async function provisionVirtualAccount() {
+    const body = JSON.stringify({
+      accountNumber: document.getElementById('vaNum').value.trim(),
+      merchantId: document.getElementById('vaMch').value.trim(),
+      merchantName: document.getElementById('vaName').value.trim(),
+      feeBasisPoints: Number(document.getElementById('vaBps').value),
+      feeCapKobo: Number(document.getElementById('vaCap').value)
+    });
+    try {
+      const res = await fetch('/api/v1/virtual-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      });
+      const data = await res.json();
+      showToast(res.ok ? `Provisioned VA ${data.accountNumber} (${data.merchantId})` : data.error, !res.ok);
+      refreshDashboard();
+    } catch (e) {
+      showToast('Provisioning failed: ' + e.message, true);
+    }
+  }
+
+  function badgeClass(status) {
+    const s = String(status || '').toUpperCase();
+    if (s.includes('SETTLED') || s.includes('PUBLISHED') || s.includes('SUCCESS')) return 'b-settled';
+    if (s.includes('DEBIT')) return 'b-debit';
+    if (s.includes('REFUND') || s.includes('REVERSED')) return 'b-refund';
+    return 'b-fail';
+  }
+
+  async function refreshDashboard() {
+    try {
+      const res = await fetch('/api/v1/dashboard/overview');
+      const data = await res.json();
+      const rec = data.reconciliation || {};
+
+      const pill = document.getElementById('reconPill');
+      pill.textContent = `T+0 AUDIT: ${rec.reconciliationStatus} (VARIANCE: ${rec.discrepancyKobo} KOBO)`;
+      pill.className = rec.reconciliationStatus === 'BALANCED_OK' ? 'status-pill' : 'status-pill error';
+
+      document.getElementById('kpiWallet').textContent = formatNaira(rec.totalMerchantWalletBalanceKobo);
+      document.getElementById('kpiWalletKobo').textContent = `${Number(rec.totalMerchantWalletBalanceKobo || 0).toLocaleString()} kobo`;
+
+      document.getElementById('kpiLedger').textContent = formatNaira(rec.netLedgerMerchantPayoutKobo);
+      document.getElementById('kpiLedgerKobo').textContent = `${Number(rec.netLedgerMerchantPayoutKobo || 0).toLocaleString()} kobo`;
+
+      document.getElementById('kpiRevenue').textContent = formatNaira(rec.totalPlatformRevenueKobo);
+      document.getElementById('kpiRevenueKobo').textContent = `${Number(rec.totalPlatformRevenueKobo || 0).toLocaleString()} kobo`;
+
+      document.getElementById('kpiVariance').textContent = `${rec.discrepancyKobo ?? 0} kobo`;
+      document.getElementById('kpiOutbox').textContent = `Pending Outbox: ${rec.pendingOutboxEvents ?? 0}`;
+
+      // Merchant Audit Table
+      const mRows = (rec.merchantAudit || []).map(m => `
+        <tr>
+          <td><strong>${m.merchant_id}</strong></td>
+          <td>${Number(m.wallet_kobo).toLocaleString()}</td>
+          <td>${Number(m.ledger_net_kobo).toLocaleString()}</td>
+          <td><span class="badge b-settled">${m.variance_kobo} kobo</span></td>
+        </tr>`).join('');
+      document.getElementById('tblMerchants').innerHTML = mRows || '<tr><td colspan="4">No wallets yet</td></tr>';
+
+      // Virtual Accounts Table & Dropdown Sync
+      const vas = data.virtualAccounts || [];
+      document.getElementById('tblVa').innerHTML = vas.map(v => `
+        <tr>
+          <td>${v.account_number}</td>
+          <td>${v.merchant_id} (${v.merchant_name})</td>
+          <td>${v.fee_basis_points} bps</td>
+          <td>${Number(v.fee_cap_kobo).toLocaleString()}</td>
+        </tr>`).join('');
+
+      if (vas.length > 0) {
+        const crVa = document.getElementById('crVa');
+        const current = crVa.value;
+        crVa.innerHTML = vas.map(v =>
+          `<option value="${v.account_number}" data-mch="${v.merchant_id}">${v.account_number} (${v.merchant_id} - ${(v.fee_basis_points/100).toFixed(2)}%)</option>`
+        ).join('');
+        if ([...crVa.options].some(o => o.value === current)) crVa.value = current;
+      }
+
+      // Ledger Table
+      document.getElementById('tblLedger').innerHTML = (data.ledger || []).map(l => `
+        <tr>
+          <td>#${l.id}</td>
+          <td>${l.transaction_reference}</td>
+          <td>${l.merchant_id}</td>
+          <td>${l.virtual_account_number}</td>
+          <td>${(Math.abs(Number(l.merchant_payout_kobo || 0)) + Math.abs(Number(l.platform_fee_kobo || 0))).toLocaleString()}</td>
+          <td>${Number(l.platform_fee_kobo).toLocaleString()}</td>
+          <td><strong>${Number(l.merchant_payout_kobo).toLocaleString()}</strong></td>
+          <td><span class="badge ${badgeClass(l.status)}">${l.status}</span></td>
+        </tr>`).join('');
+
+      // Outbox Table
+      document.getElementById('tblOutbox').innerHTML = (data.outbox || []).map(o => `
+        <tr>
+          <td>#${o.id}</td>
+          <td>${o.aggregate_id || o.merchant_id || '-'}</td>
+          <td>${o.event_type || 'SETTLEMENT'}</td>
+          <td><span class="badge ${badgeClass(o.status)}">${o.status}</span></td>
+        </tr>`).join('');
+
+      // DLT Table
+      const dlts = data.dltEvents || [];
+      document.getElementById('tblDlt').innerHTML = dlts.length
+        ? dlts.map(d => `
+          <tr>
+            <td>#${d.id}</td>
+            <td>${d.event_key}</td>
+            <td>${d.dlt_topic}</td>
+            <td title="${d.error_message}">${String(d.error_message || '').slice(0, 58)}...</td>
+          </tr>`).join('')
+        : '<tr><td colspan="4">No quarantined poison-pill events</td></tr>';
+
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  ['crRef', 'crMch'].forEach(id => document.getElementById(id).addEventListener('input', updateHmacPreview));
+  nextRefs();
+  refreshDashboard();
+  setInterval(refreshDashboard, 4000);
+</script>
+</body>
+</html>
