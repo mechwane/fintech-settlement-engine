@@ -27,7 +27,7 @@ public class KafkaReliabilityConfig {
                     String dltTopic = record.topic() + ".DLT";
                     log.error("[DLT ROUTED] Exhausted retries for key '{}' on topic '{}' (offset {}). Quarantining to '{}' -> {}",
                             record.key(), record.topic(), record.offset(), dltTopic, ex.getMessage());
-                    return new TopicPartition(dltTopic, 0);
+                    return new TopicPartition(dltTopic, record.partition());
                 }
         );
 

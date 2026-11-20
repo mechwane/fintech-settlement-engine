@@ -9,13 +9,13 @@ import com.fintech.settlement_service.repository.SettlementLedgerRepository;
 import com.fintech.settlement_service.service.WebhookSecurityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Duration;
+
 
 @RestController
 @RequestMapping("/api/v1/settlements")
@@ -24,7 +24,7 @@ public class SettlementWebhookController {
     private static final Logger log = LoggerFactory.getLogger(SettlementWebhookController.class);
     private static final String TOPIC = "virtual-account-settlements";
 
-    private final StringRedisTemplate redisTemplate;
+    
     private final OutboxEventRepository outboxRepository;
     private final SettlementLedgerRepository ledgerRepository;
     private final MerchantWalletRepository walletRepository;
@@ -32,12 +32,12 @@ public class SettlementWebhookController {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public SettlementWebhookController(
-            StringRedisTemplate redisTemplate,
+            
             OutboxEventRepository outboxRepository,
             SettlementLedgerRepository ledgerRepository,
             MerchantWalletRepository walletRepository,
             WebhookSecurityService securityService) {
-        this.redisTemplate = redisTemplate;
+        
         this.outboxRepository = outboxRepository;
         this.ledgerRepository = ledgerRepository;
         this.walletRepository = walletRepository;
@@ -68,23 +68,7 @@ public class SettlementWebhookController {
                     .body(new WebhookResponse("rejected", null, "Malformed JSON payload"));
         }
 
-        String ref = payload.transactionReference();
-        String idempotencyKey = "idempotency:settlement:" + ref;
-
-        // 1. Fail-open Redis rate shield
-        try {
-            Boolean isFirstSeen = this.redisTemplate.opsForValue()
-                    .setIfAbsent(idempotencyKey, "OUTBOXED", Duration.ofMinutes(10));
-
-            if (Boolean.FALSE.equals(isFirstSeen)) {
-                log.warn("[REDIS RATE SHIELD] Duplicate webhook absorbed for reference: {}", ref);
-                return ResponseEntity.ok(new WebhookResponse("ignored", ref, "Duplicate transaction reference absorbed"));
-            }
-        } catch (Exception redisEx) {
-            log.warn("[REDIS FAIL-OPEN] Redis unavailable ({}). Falling through to PostgreSQL Outbox.", redisEx.getMessage());
-        }
-
-        // 2. Durable Transactional Outbox write in PostgreSQL (zero dual-write gap)
+        if (payload.transactionReference() == null || payload.transactionReference().isBlank() || payload.merchantId() == null || payload.merchantId().isBlank() || payload.amountKobo() <= 0) { return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new WebhookResponse("rejected", payload.transactionReference(), "transactionReference, merchantId, and positive amountKobo are required")); } String ref = payload.transactionReference();
         int inserted = outboxRepository.insertOutboxEvent(
                 payload.merchantId(),
                 ref,
@@ -125,13 +109,7 @@ public class SettlementWebhookController {
         SettlementLedger original = ledgerRepository.findByTransactionReference(req.originalTransactionReference())
                 .orElse(null);
 
-        if (original == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new WebhookResponse("rejected", req.reversalReference(), "Original transaction not found"));
-        }
-
-        // 1. Insert compensating negative ledger row (immutable append-only audit trail)
-        int inserted = ledgerRepository.insertLedgerEntryIdempotently(
+        if(req.reversalReference()==null||req.reversalReference().isBlank()||req.originalTransactionReference()==null||req.originalTransactionReference().isBlank())return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new WebhookResponse("rejected",req.reversalReference(),"Missing reversal references"));if(original==null)return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new WebhookResponse("rejected",req.reversalReference(),"Original transaction not found"));if(!"SETTLED".equals(original.getStatus()))return ResponseEntity.status(HttpStatus.CONFLICT).body(new WebhookResponse("rejected",req.reversalReference(),"Only SETTLED credits can be reversed"));if(ledgerRepository.markOriginalAsReversed(original.getTransactionReference())==0)return ResponseEntity.status(HttpStatus.CONFLICT).body(new WebhookResponse("ignored",req.reversalReference(),"Already reversed"));int inserted = ledgerRepository.insertLedgerEntryIdempotently(
                 req.reversalReference(),
                 original.getVirtualAccountNumber(),
                 original.getMerchantId(),

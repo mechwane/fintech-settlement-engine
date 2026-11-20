@@ -81,7 +81,7 @@ public class WalletDisbursementController {
                 "status", "success",
                 "deductedKobo", request.amountKobo(),
                 "remainingBalanceKobo", remaining != null ? remaining : 0,
-                "remainingBalanceNoira", (remaining != null ? remaining : 0) / 100.0
+                "remainingBalanceNaira", (remaining != null ? remaining : 0) / 100.0
         ));
     }
 }

@@ -63,7 +63,7 @@ public class SettlementConsumer {
 
         String resolvedMerchantId = tier.merchantId();
         long platformFeeKobo = registryService.calculateFeeKobo(event.amountKobo(), tier);
-        long merchantPayoutKobo = event.amountKobo() - platformFeeKobo;
+        long merchantPayoutKobo = event.amountKobo() - platformFeeKobo; if (platformFeeKobo < 0 || merchantPayoutKobo < 0) throw new IllegalStateException("Negative payout invariant violated for " + ref);
 
         int rowsInserted = ledgerRepository.insertLedgerEntryIdempotently(
                 ref,

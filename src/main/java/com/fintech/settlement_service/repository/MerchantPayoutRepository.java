@@ -7,12 +7,14 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface MerchantPayoutRepository extends JpaRepository<MerchantPayout, Long> {
 
     Optional<MerchantPayout> findByPayoutReference(String payoutReference);
+@Query(value="SELECT * FROM merchant_payouts WHERE status IN ('PROCESSING','PENDING_TSQ') AND updated_at < (NOW() - INTERVAL '30 seconds')",nativeQuery=true) List<MerchantPayout> findStrandedPayouts(); @Modifying @Query(value="UPDATE merchant_payouts SET status='PENDING_TSQ',failure_reason=:reason,updated_at=NOW() WHERE payout_reference=:ref AND status='PROCESSING'",nativeQuery=true) int markPendingTsq(@Param("ref") String ref,@Param("reason") String reason);
 
     @Modifying
     @Query(value = """

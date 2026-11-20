@@ -6,9 +6,11 @@ import com.fintech.settlement_service.repository.MerchantWalletRepository;
 import com.fintech.settlement_service.repository.SettlementLedgerRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -49,7 +51,7 @@ public class PayoutService {
             String message
     ) {}
 
-    private static class InsufficientBalanceException extends RuntimeException {
+    private enum SwitchOutcome { SUCCESS, DEFINITIVE_FAILURE, TIMEOUT_PENDING_TSQ } private static class LedgerCollisionException extends RuntimeException { LedgerCollisionException(String m){super(m);} } private static class InsufficientBalanceException extends RuntimeException {
         InsufficientBalanceException(String msg) { super(msg); }
     }
 
@@ -83,17 +85,7 @@ public class PayoutService {
                     throw new InsufficientBalanceException("Insufficient wallet balance for merchant " + req.merchantId());
                 }
 
-                ledgerRepository.insertLedgerEntryIdempotently(
-                        ref,
-                        accountTag,
-                        req.merchantId(),
-                        -req.amountKobo(),
-                        0L,
-                        -req.amountKobo(),
-                        "PAYOUT_DEBIT"
-                );
-                return true;
-            });
+                int ins=ledgerRepository.insertLedgerEntryIdempotently(ref,accountTag,req.merchantId(),-req.amountKobo(),0L,-req.amountKobo(),"PAYOUT_DEBIT");if(ins==0)throw new LedgerCollisionException("Ledger collision for "+ref);return true;});}catch(LedgerCollisionException ce){return new PayoutResult(409,"rejected",ref,null,walletRepository.getAvailableBalanceKobo(req.merchantId()),ce.getMessage());
         } catch (InsufficientBalanceException ex) {
             Long currentBalance = walletRepository.getAvailableBalanceKobo(req.merchantId());
             log.warn("[PAYOUT REJECTED] {} | Merchant {} balance {} kobo < requested {} kobo",
@@ -116,47 +108,4 @@ public class PayoutService {
                 req.amountKobo(), req.merchantId(), ref);
 
         // PHASE 2: External Interbank Switch Call (No DB lock held during network I/O)
-        boolean bankSwitchSuccess = callSimulatedNipSwitch(req);
-
-        if (bankSwitchSuccess) {
-            String nibssSessionId = "NIP-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase();
-            txTemplate.executeWithoutResult(status -> payoutRepository.markSuccess(ref, nibssSessionId));
-            Long newBalance = walletRepository.getAvailableBalanceKobo(req.merchantId());
-
-            log.info("[PAYOUT PHASE 2 SUCCESS] Ref {} settled via {} | Remaining wallet: {} kobo",
-                    ref, nibssSessionId, newBalance);
-            return new PayoutResult(200, "settled", ref, nibssSessionId, newBalance,
-                    "Disbursement settled successfully");
-        } else {
-            // Compensating Rollback Transaction: Append PAYOUT_REFUND + Restore Wallet Balance
-            String failureReason = "NIBSS NIP Switch Timeout / Destination Bank Unreachable (Code 91)";
-            String refundRef = ref + "-REV";
-
-            txTemplate.executeWithoutResult(status -> {
-                ledgerRepository.insertLedgerEntryIdempotently(
-                        refundRef,
-                        accountTag,
-                        req.merchantId(),
-                        req.amountKobo(),
-                        0L,
-                        req.amountKobo(),
-                        "PAYOUT_REFUND"
-                );
-                walletRepository.creditWalletAtomically(req.merchantId(), req.amountKobo());
-                payoutRepository.markFailedRefunded(ref, failureReason);
-            });
-
-            Long restoredBalance = walletRepository.getAvailableBalanceKobo(req.merchantId());
-            log.error("[PAYOUT PHASE 2 FAILED -> REFUNDED] Ref {} failed ({}). Re-credited {} kobo to {}. Restored balance: {} kobo",
-                    ref, failureReason, req.amountKobo(), req.merchantId(), restoredBalance);
-
-            return new PayoutResult(502, "failed_refunded", ref, null, restoredBalance,
-                    "Outbound bank transfer failed; compensating refund credited atomically");
-        }
-    }
-
-    private boolean callSimulatedNipSwitch(PayoutRequest req) {
-        // Bank code "999" or account "0000000000" triggers deterministic switch failure for testing
-        return !"999".equals(req.destinationBankCode()) && !"0000000000".equals(req.destinationAccountNumber());
-    }
-}
+        SwitchOutcome out=callSimulatedNipSwitch(req);if(out==SwitchOutcome.SUCCESS){String sid="NIP-"+UUID.randomUUID().toString().substring(0,12).toUpperCase();txTemplate.executeWithoutResult(s->payoutRepository.markSuccess(ref,sid));return new PayoutResult(200,"settled",ref,sid,walletRepository.getAvailableBalanceKobo(req.merchantId()),"Disbursement settled");}if(out==SwitchOutcome.TIMEOUT_PENDING_TSQ){txTemplate.executeWithoutResult(s->payoutRepository.markPendingTsq(ref,"Switch Timeout (Code 97)"));return new PayoutResult(202,"pending_tsq",ref,null,walletRepository.getAvailableBalanceKobo(req.merchantId()),"Switch timeout; queued for TSQ");}refundPayoutAtomically(ref,accountTag,req.merchantId(),req.amountKobo(),"Switch Rejected (Code 91)");return new PayoutResult(502,"failed_refunded",ref,null,walletRepository.getAvailableBalanceKobo(req.merchantId()),"Bank transfer failed; refunded");}private void refundPayoutAtomically(String ref,String tag,String mch,long amt,String reason){txTemplate.executeWithoutResult(s->{if(ledgerRepository.insertLedgerEntryIdempotently(ref+"-REV",tag,mch,amt,0L,amt,"PAYOUT_REFUND")==1)walletRepository.creditWalletAtomically(mch,amt);payoutRepository.markFailedRefunded(ref,reason);});}@Scheduled(fixedDelay=15000)public void reconcileStrandedPayouts(){for(MerchantPayout p:payoutRepository.findStrandedPayouts()){String tag="BANK:"+p.getDestinationBankCode()+":"+p.getDestinationAccountNumber();if("998".equals(p.getDestinationBankCode()))refundPayoutAtomically(p.getPayoutReference(),tag,p.getMerchantId(),p.getAmountKobo(),"TSQ Confirmed Unsettled");else txTemplate.executeWithoutResult(s->payoutRepository.markSuccess(p.getPayoutReference(),"NIP-TSQ-"+UUID.randomUUID().toString().substring(0,8).toUpperCase()));}}private SwitchOutcome callSimulatedNipSwitch(PayoutRequest req){if("999".equals(req.destinationBankCode())||"0000000000".equals(req.destinationAccountNumber()))return SwitchOutcome.DEFINITIVE_FAILURE;if("998".equals(req.destinationBankCode())||"1111111111".equals(req.destinationAccountNumber()))return SwitchOutcome.TIMEOUT_PENDING_TSQ;return SwitchOutcome.SUCCESS;}}

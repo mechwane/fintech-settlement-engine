@@ -585,9 +585,9 @@
       feeCapKobo: Number(document.getElementById('vaCap').value)
     });
     try {
-      const res = await fetch('/api/v1/virtual-accounts', {
+      const sig = await computeHmacHex(SECRET_KEY, body); const res = await fetch('/api/v1/virtual-accounts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Webhook-Signature': sig },
         body
       });
       const data = await res.json();

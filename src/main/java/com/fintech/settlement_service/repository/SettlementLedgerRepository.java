@@ -12,7 +12,7 @@ import java.util.Optional;
 @Repository
 public interface SettlementLedgerRepository extends JpaRepository<SettlementLedger, Long> {
     Optional<SettlementLedger> findByTransactionReference(String transactionReference);
-    boolean existsByTransactionReference(String transactionReference);
+    boolean existsByTransactionReference(String transactionReference); @Modifying @Query(value="UPDATE settlement_ledger SET status='REVERSED' WHERE transaction_reference=:ref AND status='SETTLED'",nativeQuery=true) int markOriginalAsReversed(@Param("ref") String ref);
 
     @Modifying
     @Query(value = """

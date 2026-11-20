@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
-public class VirtualAccountRegistryService {
+public class VirtualAccountRegistryService { public static class UnregisteredAccountException extends RuntimeException { public UnregisteredAccountException(String m){super(m);} } public static class DuplicateAccountException extends RuntimeException { public DuplicateAccountException(String m) { super(m); } }
 
     private static final Logger log = LoggerFactory.getLogger(VirtualAccountRegistryService.class);
     private static final String CACHE_PREFIX = "va:tier:";
@@ -46,21 +46,7 @@ public class VirtualAccountRegistryService {
             boolean active
     ) {}
 
-    @EventListener(ApplicationReadyEvent.class)
-    public void seedDefaultVirtualAccounts() {
-        if (!vaRepository.existsById("0123456789")) {
-            VirtualAccount defaultAccount = new VirtualAccount(
-                    "0123456789",
-                    "MCH-8821",
-                    "Standard Merchant Core",
-                    DEFAULT_FEE_BPS,
-                    DEFAULT_FEE_CAP_KOBO,
-                    true
-            );
-            vaRepository.save(defaultAccount);
-            log.info("[VA SEEDED] Provisioned default virtual account 0123456789 -> MCH-8821 (150 bps, cap 200000 kobo)");
-        }
-    }
+    @EventListener(ApplicationReadyEvent.class) public void seedDefaultVirtualAccounts(){if(!vaRepository.existsById("0123456789"))vaRepository.save(new VirtualAccount("0123456789","MCH-8821","Standard Merchant Core",DEFAULT_FEE_BPS,DEFAULT_FEE_CAP_KOBO,true));if(!vaRepository.existsById("9876543210"))vaRepository.save(new VirtualAccount("9876543210","MCH-9901","Paystack Enterprise VIP",50,50000L,true));if(!vaRepository.existsById("5544332211"))vaRepository.save(new VirtualAccount("5544332211","MCH-7700","Flutterwave Logistics Hub",100,100000L,true));}
 
     public VirtualAccount registerAccount(
             String accountNumber,
@@ -68,7 +54,7 @@ public class VirtualAccountRegistryService {
             String merchantName,
             int feeBasisPoints,
             long feeCapKobo) {
-        VirtualAccount entity = new VirtualAccount(
+        if (feeBasisPoints < 0 || feeBasisPoints > 10_000) throw new IllegalArgumentException("feeBasisPoints must be 0..10000"); if (feeCapKobo < 0) throw new IllegalArgumentException("feeCapKobo must be non-negative"); if (vaRepository.existsById(accountNumber)) throw new DuplicateAccountException("Virtual account " + accountNumber + " already exists"); VirtualAccount entity = new VirtualAccount(
                 accountNumber, merchantId, merchantName, feeBasisPoints, feeCapKobo, true
         );
         VirtualAccount saved = vaRepository.save(entity);
@@ -127,23 +113,10 @@ public class VirtualAccountRegistryService {
         }
 
         // 3. Fallback Standard Tier for Unregistered Test Accounts
-        return new AccountTier(
-                accountNumber != null ? accountNumber : "UNREGISTERED",
-                fallbackMerchantId,
-                "Unregistered Standard Tier",
-                DEFAULT_FEE_BPS,
-                DEFAULT_FEE_CAP_KOBO,
-                true
-        );
+        throw new UnregisteredAccountException("Rejected credit to unregistered virtual account: "+accountNumber);
     }
 
-    public long calculateFeeKobo(long amountKobo, AccountTier tier) {
-        BigDecimal gross = BigDecimal.valueOf(amountKobo);
-        BigDecimal bps = BigDecimal.valueOf(tier.feeBasisPoints());
-        BigDecimal rawFee = gross.multiply(bps)
-                .divide(BigDecimal.valueOf(10_000L), 0, RoundingMode.HALF_UP);
-        return Math.min(rawFee.longValue(), tier.feeCapKobo());
-    }
+    public long calculateFeeKobo(long amountKobo, AccountTier tier) { int safeBps = Math.max(0, Math.min(tier.feeBasisPoints(), 10_000)); long safeCap = Math.max(0L, tier.feeCapKobo()); BigDecimal rawFee = BigDecimal.valueOf(amountKobo).multiply(BigDecimal.valueOf(safeBps)).divide(BigDecimal.valueOf(10_000L), 0, RoundingMode.HALF_UP); return Math.max(0L, Math.min(rawFee.longValue(), Math.min(safeCap, amountKobo))); }
 
     private void writeToRedisSafely(String accountNumber, AccountTier tier) {
         try {
